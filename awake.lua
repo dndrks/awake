@@ -58,6 +58,8 @@ two = {
   data = {5,7,0,0,0,0,0,0,0,0,0,0,0,0,0,0}
 }
 
+clock_active = true
+
 function add_pattern_params() 
   params:add_separator()
   params:add_group("pattern 1",17)
@@ -138,57 +140,73 @@ function random()
   for i=1,two.length do set_loop_data("two", i, math.floor(math.random()*9)) end
 end
 
+function transport(state)
+  if state == 0 then
+    clock_active = false
+    all_notes_off()
+    one.pos = 0
+    two.pos = 0
+  else
+    clock_active = true
+  end
+  if g then
+    gridredraw()
+  end
+  redraw()
+end
+
 function step()
   while true do
     clock.sync(1/params:get("step_div"))
 
-    all_notes_off()
+    if clock_active then
+      all_notes_off()
 
-    one.pos = one.pos + 1
-    if one.pos > one.length then one.pos = 1 end
-    two.pos = two.pos + 1
-    if two.pos > two.length then two.pos = 1 end
+      one.pos = one.pos + 1
+      if one.pos > one.length then one.pos = 1 end
+      two.pos = two.pos + 1
+      if two.pos > two.length then two.pos = 1 end
 
-    if one.data[one.pos] > 0 then
-      local note_num = notes[one.data[one.pos]+two.data[two.pos]]
-      local freq = MusicUtil.note_num_to_freq(note_num)
-      -- Trig Probablility
-      if math.random(100) <= params:get("probability") then
-        -- Audio engine out
-        if params:get("output") == 1 or params:get("output") == 3 then
-          engine.hz(freq)
-        elseif params:get("output") == 4 then
-          crow.output[1].volts = (note_num-60)/12
-          crow.output[2].execute()
-        elseif params:get("output") == 5 then
-          crow.ii.jf.play_note((note_num-60)/12,5)
-        end
+      if one.data[one.pos] > 0 then
+        local note_num = notes[one.data[one.pos]+two.data[two.pos]]
+        local freq = MusicUtil.note_num_to_freq(note_num)
+        -- Trig Probablility
+        if math.random(100) <= params:get("probability") then
+          -- Audio engine out
+          if params:get("output") == 1 or params:get("output") == 3 then
+            engine.hz(freq)
+          elseif params:get("output") == 4 then
+            crow.output[1].volts = (note_num-60)/12
+            crow.output[2].execute()
+          elseif params:get("output") == 5 then
+            crow.ii.jf.play_note((note_num-60)/12,5)
+          end
 
-        -- MIDI out
-        if (params:get("output") == 2 or params:get("output") == 3) then
-          midi_out_device:note_on(note_num, 96, midi_out_channel)
-          table.insert(active_notes, note_num)
+          -- MIDI out
+          if (params:get("output") == 2 or params:get("output") == 3) then
+            midi_out_device:note_on(note_num, 96, midi_out_channel)
+            table.insert(active_notes, note_num)
 
-          --local note_off_time = 
-          -- Note off timeout
-          if params:get("note_length") < 4 then
-            notes_off_metro:start((60 / params:get("clock_tempo") / params:get("step_div")) * params:get("note_length"), 1)
+            --local note_off_time = 
+            -- Note off timeout
+            if params:get("note_length") < 4 then
+              notes_off_metro:start((60 / params:get("clock_tempo") / params:get("step_div")) * params:get("note_length"), 1)
+            end
           end
         end
       end
-    end
 
-    if g then
-      gridredraw()
+      if g then
+        gridredraw()
+      end
+      redraw()
     end
-    redraw()
   end
 end
 
 function stop()
   all_notes_off()
 end
-
 
 function init()
   for i = 1, #MusicUtil.SCALES do
@@ -220,6 +238,10 @@ function init()
       all_notes_off()
       midi_out_channel = value
     end}
+
+  params:add{type = "trigger", id = "start/stop", name = "start/stop", 
+    action = function() transport(clock_active == true and 0 or 1) end}
+
   params:add_separator()
   
   params:add{type = "number", id = "step_div", name = "step division", min = 1, max = 16, default = 4}
